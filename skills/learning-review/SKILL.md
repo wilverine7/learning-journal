@@ -13,7 +13,8 @@ Personal learning journal across all Cursor projects. Data lives in `~/.cursor/l
 1. Run merge so the ledger is current:
 
 ```bash
-python3 ~/.cursor/hooks/learning_journal/hook.py merge-force
+learning-journal merge-force
+# or: ~/.cursor/hooks/learning_journal/run.sh merge-force
 ```
 
 2. Read these files:

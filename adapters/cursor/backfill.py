@@ -1,35 +1,35 @@
-"""One-time backfill of learning journal from Cursor agent transcripts."""
+"""One-time backfill from Cursor agent transcripts into the normalized ledger."""
 
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lib import (
-    JOURNAL_DIR,
-    PROMPTS_PATH,
-    SIGNALS_PATH,
-    append_jsonl,
-    detect_patterns_in_text,
-    ensure_journal,
-    load_pattern_catalog,
-    load_state,
-    looks_like_learning_question,
+from core.ledger import (
     merge_pending,
-    project_id_for_root,
-    project_label,
-    prompt_requested_pattern,
-    relativize_path,
-    save_state,
-    trim_excerpt,
+    record_agent_edit,
+    record_agent_mention,
+    record_user_prompt,
     utc_now_iso,
 )
+from core.patterns import (
+    detect_patterns_in_text,
+    load_pattern_catalog,
+    looks_like_learning_question,
+    prompt_requested_pattern,
+    trim_excerpt,
+)
+from core.paths import JOURNAL_DIR, TOPICS_PATH
+from core.projects import build_project_context, relativize_path
+from core.storage import ensure_journal, load_state, save_state
 
-PROJECTS_ROOT = Path.home() / ".cursor" / "projects"
+SOURCE = "cursor"
+CURSOR_PROJECTS_ROOT = Path.home() / ".cursor" / "projects"
+
 USER_QUERY_RE = re.compile(r"<user_query>\s*(.*?)\s*</user_query>", re.DOTALL | re.IGNORECASE)
 FILE_AT_RE = re.compile(r"@([\w./\-]+(?:\.[\w]+)?)")
 RECOMMENDATION_RE = re.compile(
@@ -61,10 +61,8 @@ def infer_workspace_root(paths: list[str]) -> str | None:
                 roots.append(git_root)
         elif path.is_dir() and (path / ".git").exists():
             roots.append(path)
-
     if not roots:
         return None
-
     roots.sort(key=lambda item: len(str(item)))
     return str(roots[0])
 
@@ -109,23 +107,21 @@ def extract_user_prompt(text: str) -> str:
     return text.strip()
 
 
-def attached_files_from_prompt(prompt: str, workspace_root: str | None) -> list[str]:
-    if not workspace_root:
-        return []
+def attached_files_from_prompt(prompt: str, workspace_root: str) -> list[str]:
     files: list[str] = []
     for match in FILE_AT_RE.finditer(prompt):
         candidate = match.group(1)
         if "/" not in candidate and not candidate.endswith((".ts", ".tsx", ".js", ".jsx", ".py", ".sql", ".gql")):
             continue
         absolute = str((Path(workspace_root) / candidate).resolve())
-        files.append(relativize_path(absolute, [workspace_root]))
+        files.append(relativize_path(absolute, workspace_root))
     return files[:5]
 
 
 def transcript_paths() -> list[Path]:
-    if not PROJECTS_ROOT.exists():
+    if not CURSOR_PROJECTS_ROOT.exists():
         return []
-    return sorted(PROJECTS_ROOT.glob("**/agent-transcripts/**/*.jsonl"))
+    return sorted(CURSOR_PROJECTS_ROOT.glob("**/agent-transcripts/**/*.jsonl"))
 
 
 def backfill_record_key(path: Path) -> str:
@@ -136,8 +132,7 @@ def should_process_transcript(path: Path, state: dict[str, Any], force: bool) ->
     if force:
         return True
     backfilled = state.setdefault("backfilled_transcripts", {})
-    key = backfill_record_key(path)
-    entry = backfilled.get(key)
+    entry = backfilled.get(backfill_record_key(path))
     if not isinstance(entry, dict):
         return True
     try:
@@ -148,12 +143,11 @@ def should_process_transcript(path: Path, state: dict[str, Any], force: bool) ->
 
 def mark_transcript_processed(path: Path, state: dict[str, Any], stats: dict[str, int]) -> None:
     backfilled = state.setdefault("backfilled_transcripts", {})
-    key = backfill_record_key(path)
     try:
         mtime = path.stat().st_mtime
     except OSError:
         mtime = 0
-    backfilled[key] = {
+    backfilled[backfill_record_key(path)] = {
         "mtime": mtime,
         "processed_at": utc_now_iso(),
         "prompts": stats.get("prompts", 0),
@@ -161,31 +155,25 @@ def mark_transcript_processed(path: Path, state: dict[str, Any], stats: dict[str
     }
 
 
-def make_context(
-    *,
-    at: str,
-    conversation_id: str,
-    generation_id: str,
-    workspace_root: str,
-) -> dict[str, Any]:
-    project_id = project_id_for_root(workspace_root)
-    return {
-        "at": at,
-        "conversation_id": conversation_id,
-        "generation_id": generation_id,
-        "project_id": project_id,
-        "project_label": project_label(project_id, workspace_root),
-        "workspace_root": workspace_root,
-        "workspace_name": Path(workspace_root).name,
-        "source": "transcript_backfill",
-        "transcript_source": "agent_transcript",
-    }
+def transcript_intent(
+    last_user_prompt: dict[str, Any] | None,
+    slug: str,
+    keywords: list[str],
+) -> str:
+    if not last_user_prompt:
+        return "agent_initiated"
+    prompt = str(last_user_prompt.get("prompt") or "")
+    if slug in (last_user_prompt.get("matched_slugs") or []):
+        if last_user_prompt.get("is_learning_question"):
+            return "user_question"
+        return "fulfilled_request"
+    if prompt_requested_pattern(prompt, slug, keywords):
+        return "fulfilled_request"
+    return "agent_initiated"
 
 
 def process_transcript(path: Path, dry_run: bool) -> dict[str, int]:
     stats = {"prompts": 0, "signals": 0, "lines": 0}
-    from datetime import datetime, timezone
-
     try:
         mtime_iso = (
             datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
@@ -212,17 +200,17 @@ def process_transcript(path: Path, dry_run: bool) -> dict[str, int]:
             if isinstance(record, dict):
                 lines.append(record)
                 for block in record.get("message", {}).get("content", []) or []:
-                    if not isinstance(block, dict):
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
                         continue
-                    if block.get("type") == "tool_use":
-                        tool_input = block.get("input") or {}
-                        if isinstance(tool_input, dict):
-                            collected_paths.extend(extract_paths_from_tool(str(block.get("name") or ""), tool_input))
+                    tool_input = block.get("input") or {}
+                    if isinstance(tool_input, dict):
+                        collected_paths.extend(extract_paths_from_tool(str(block.get("name") or ""), tool_input))
 
     workspace_root = infer_workspace_root(collected_paths)
     if not workspace_root:
         return stats
 
+    project = build_project_context(workspace_root)
     catalog = {item["slug"]: item for item in load_pattern_catalog()}
     last_user_prompt: dict[str, Any] | None = None
     turn_index = 0
@@ -232,7 +220,7 @@ def process_transcript(path: Path, dry_run: bool) -> dict[str, int]:
         role = record.get("role")
         content = record.get("message", {}).get("content", []) or []
         turn_index += 1
-        generation_id = f"{conversation_id}:{turn_index}"
+        turn_id = f"{conversation_id}:{turn_index}"
 
         if role == "user":
             texts = [
@@ -254,37 +242,20 @@ def process_transcript(path: Path, dry_run: bool) -> dict[str, int]:
                 }
                 continue
 
-            ctx = make_context(
-                at=mtime_iso,
-                conversation_id=conversation_id,
-                generation_id=generation_id,
-                workspace_root=workspace_root,
-            )
-            attached = attached_files_from_prompt(prompt, workspace_root)
-            prompt_record = {
-                **ctx,
-                "type": "user_prompt",
-                "prompt": prompt,
-                "prompt_excerpt": trim_excerpt(prompt),
-                "is_learning_question": True,
-                "matched_slugs": matched_slugs,
-                "attached_files": attached,
-            }
             if not dry_run:
-                append_jsonl(PROMPTS_PATH, prompt_record)
-                state = load_state()
-                state["prompts_by_generation"][generation_id] = {
-                    "prompt": prompt,
-                    "prompt_excerpt": prompt_record["prompt_excerpt"],
-                    "is_learning_question": True,
-                    "matched_slugs": matched_slugs,
-                    "attached_files": attached,
-                    "project_id": ctx["project_id"],
-                    "project_label": ctx["project_label"],
-                    "workspace_root": workspace_root,
-                    "at": mtime_iso,
-                }
-                save_state(state)
+                record_user_prompt(
+                    source=SOURCE,
+                    at=mtime_iso,
+                    conversation_id=conversation_id,
+                    turn_id=turn_id,
+                    project_id=project["project_id"],
+                    project_label=project["project_label"],
+                    workspace_root=workspace_root,
+                    workspace_name=project["workspace_name"],
+                    prompt=prompt,
+                    attached_files=attached_files_from_prompt(prompt, workspace_root),
+                    capture_type="user_prompt_backfill",
+                )
             stats["prompts"] += 1
             last_user_prompt = {
                 "prompt": prompt,
@@ -295,13 +266,6 @@ def process_transcript(path: Path, dry_run: bool) -> dict[str, int]:
 
         if role != "assistant":
             continue
-
-        ctx = make_context(
-            at=mtime_iso,
-            conversation_id=conversation_id,
-            generation_id=generation_id,
-            workspace_root=workspace_root,
-        )
 
         for block in content:
             if not isinstance(block, dict):
@@ -316,68 +280,59 @@ def process_transcript(path: Path, dry_run: bool) -> dict[str, int]:
                 recommendation = bool(RECOMMENDATION_RE.search(text))
                 for slug in slugs:
                     keywords = catalog.get(slug, {}).get("keywords", [])
+                    if transcript_intent(last_user_prompt, slug, keywords) == "fulfilled_request":
+                        continue
+                    if not dry_run:
+                        record_agent_mention(
+                            source=SOURCE,
+                            at=mtime_iso,
+                            conversation_id=conversation_id,
+                            turn_id=turn_id,
+                            project_id=project["project_id"],
+                            project_label=project["project_label"],
+                            workspace_root=workspace_root,
+                            workspace_name=project["workspace_name"],
+                            slug=slug,
+                            text_excerpt=trim_excerpt(text),
+                            is_recommendation=recommendation,
+                            intent=transcript_intent(last_user_prompt, slug, keywords),
+                        )
+                    stats["signals"] += 1
+
+            if block.get("type") != "tool_use":
+                continue
+            tool_name = str(block.get("name") or "")
+            tool_input = block.get("input") or {}
+            if tool_name not in CODE_TOOLS or not isinstance(tool_input, dict):
+                continue
+            for file_path, code_text in extract_code_from_tool(tool_name, tool_input):
+                slugs = detect_patterns_in_text(code_text, "code")
+                if not slugs:
+                    continue
+                relative_file = relativize_path(file_path, workspace_root) if file_path else None
+                for slug in slugs:
+                    keywords = catalog.get(slug, {}).get("keywords", [])
                     intent = transcript_intent(last_user_prompt, slug, keywords)
                     if intent == "fulfilled_request":
                         continue
-                    signal = {
-                        **ctx,
-                        "type": "agent_mention",
-                        "slug": slug,
-                        "text_excerpt": trim_excerpt(text),
-                        "is_recommendation": recommendation,
-                        "intent": intent,
-                    }
                     if not dry_run:
-                        append_jsonl(SIGNALS_PATH, signal)
+                        record_agent_edit(
+                            source=SOURCE,
+                            at=mtime_iso,
+                            conversation_id=conversation_id,
+                            turn_id=turn_id,
+                            project_id=project["project_id"],
+                            project_label=project["project_label"],
+                            workspace_root=workspace_root,
+                            workspace_name=project["workspace_name"],
+                            slug=slug,
+                            file=relative_file,
+                            snippets=[trim_excerpt(code_text, 160)],
+                            intent=intent,
+                        )
                     stats["signals"] += 1
 
-            if block.get("type") == "tool_use":
-                tool_name = str(block.get("name") or "")
-                tool_input = block.get("input") or {}
-                if tool_name not in CODE_TOOLS or not isinstance(tool_input, dict):
-                    continue
-                for file_path, code_text in extract_code_from_tool(tool_name, tool_input):
-                    slugs = detect_patterns_in_text(code_text, "code")
-                    if not slugs:
-                        continue
-                    relative_file = None
-                    if file_path:
-                        relative_file = relativize_path(file_path, [workspace_root])
-                    for slug in slugs:
-                        keywords = catalog.get(slug, {}).get("keywords", [])
-                        intent = transcript_intent(last_user_prompt, slug, keywords)
-                        if intent == "fulfilled_request":
-                            continue
-                        signal = {
-                            **ctx,
-                            "type": "agent_edit",
-                            "slug": slug,
-                            "file": relative_file,
-                            "snippets": [trim_excerpt(code_text, 160)],
-                            "intent": intent,
-                        }
-                        if not dry_run:
-                            append_jsonl(SIGNALS_PATH, signal)
-                        stats["signals"] += 1
-
     return stats
-
-
-def transcript_intent(
-    last_user_prompt: dict[str, Any] | None,
-    slug: str,
-    keywords: list[str],
-) -> str:
-    if not last_user_prompt:
-        return "agent_initiated"
-    prompt = str(last_user_prompt.get("prompt") or "")
-    if slug in (last_user_prompt.get("matched_slugs") or []):
-        if last_user_prompt.get("is_learning_question"):
-            return "user_question"
-        return "fulfilled_request"
-    if prompt_requested_pattern(prompt, slug, keywords):
-        return "fulfilled_request"
-    return "agent_initiated"
 
 
 def run_backfill(force: bool = False, dry_run: bool = False) -> dict[str, Any]:
@@ -386,6 +341,7 @@ def run_backfill(force: bool = False, dry_run: bool = False) -> dict[str, Any]:
     paths = transcript_paths()
 
     summary = {
+        "adapter": SOURCE,
         "transcripts_seen": len(paths),
         "transcripts_processed": 0,
         "transcripts_skipped": 0,
@@ -411,11 +367,10 @@ def run_backfill(force: bool = False, dry_run: bool = False) -> dict[str, Any]:
         save_state(state)
         merge_pending(force=True)
 
-    topics_path = JOURNAL_DIR / "topics.json"
     topic_count = 0
-    if topics_path.exists():
+    if TOPICS_PATH.exists():
         try:
-            topic_count = len(json.loads(topics_path.read_text(encoding="utf-8")).get("topics", {}))
+            topic_count = len(json.loads(TOPICS_PATH.read_text(encoding="utf-8")).get("topics", {}))
         except json.JSONDecodeError:
             topic_count = 0
     summary["topics_total"] = topic_count
@@ -424,9 +379,7 @@ def run_backfill(force: bool = False, dry_run: bool = False) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> None:
     args = argv if argv is not None else sys.argv[1:]
-    force = "--force" in args
-    dry_run = "--dry-run" in args
-    summary = run_backfill(force=force, dry_run=dry_run)
+    summary = run_backfill(force="--force" in args, dry_run="--dry-run" in args)
     print(json.dumps(summary, indent=2))
 
 

@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Tool-agnostic CLI for the learning journal."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from core.ledger import merge_pending  # noqa: E402
+from core.storage import ensure_journal  # noqa: E402
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Learning journal CLI")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("merge", help="Merge pending prompts/signals into topics.json")
+    sub.add_parser("merge-force", help="Merge immediately (ignore debounce)")
+
+    backfill = sub.add_parser("backfill", help="Run adapter backfill (default: cursor)")
+    backfill.add_argument("--adapter", default="cursor", choices=["cursor"])
+    backfill.add_argument("--force", action="store_true")
+    backfill.add_argument("--dry-run", action="store_true")
+
+    args = parser.parse_args()
+    ensure_journal()
+
+    if args.command == "merge":
+        merge_pending(force=False)
+        print(json.dumps({"status": "merged"}))
+        return
+    if args.command == "merge-force":
+        merge_pending(force=True)
+        print(json.dumps({"status": "merged"}))
+        return
+    if args.command == "backfill":
+        if args.adapter == "cursor":
+            from adapters.cursor.backfill import run_backfill
+
+            summary = run_backfill(force=args.force, dry_run=args.dry_run)
+            print(json.dumps(summary, indent=2))
+            return
+        raise SystemExit(f"Unsupported adapter: {args.adapter}")
+
+
+if __name__ == "__main__":
+    main()

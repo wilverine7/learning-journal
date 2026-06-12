@@ -1,16 +1,18 @@
-# Cursor Learning Journal
+# Learning Journal
 
-Track what you ask Cursor about, detect patterns Cursor keeps suggesting, and run interactive review sessions to move topics from **discovered → learning → learned** (5 review passes).
+Track what you ask your AI coding tools about, detect patterns they keep suggesting, and run interactive review sessions to move topics from **discovered → learning → learned** (5 review passes).
 
-Works **across all projects** via user-level Cursor hooks. Personal ledger data stays in `~/.cursor/learning-journal/` — never committed.
+**Cursor adapter included today.** Core ledger and CLI are tool-agnostic; Claude Code adapter is stubbed for future work.
+
+Personal ledger data stays in `~/.cursor/learning-journal/` (override with `LEARNING_JOURNAL_HOME`) — never committed.
 
 ## What it does
 
-| Signal | Captured from |
-|--------|----------------|
+| Signal | Captured from (Cursor) |
+|--------|------------------------|
 | Your learning questions | Every chat prompt (`what`, `why`, `explain`, …) |
-| Cursor-applied patterns | Agent file edits (`useMemo`, `COALESCE`, …) |
-| Cursor-mentioned patterns | Agent replies |
+| Agent-applied patterns | Agent file edits (`useMemo`, `COALESCE`, …) |
+| Agent-mentioned patterns | Agent replies |
 
 **Skills (invoke in Cursor chat):**
 
@@ -19,91 +21,75 @@ Works **across all projects** via user-level Cursor hooks. Personal ledger data 
 
 ## Requirements
 
-- [Cursor](https://cursor.com) with **Hooks** enabled
+- [Cursor](https://cursor.com) with **Hooks** enabled (today)
 - **Python 3.9+**
-- macOS / Linux (Windows may work with minor path tweaks)
+- macOS / Linux
 
 ## Install
 
 ```bash
-git clone https://github.com/YOUR_USER/cursor-learning-journal.git
-cd cursor-learning-journal
+git clone https://github.com/YOUR_USER/learning-journal.git
+cd learning-journal
 ./install.sh
 ```
 
-The installer:
-
-1. Symlinks hook scripts and skills into `~/.cursor/`
-2. Merges hook entries into `~/.cursor/hooks.json` (preserves your existing hooks)
-3. Creates `~/.cursor/learning-journal/` from templates if missing
-
 Then **restart Cursor** and check **Settings → Hooks**.
+
+## CLI (tool-agnostic)
+
+After install, `~/.cursor/bin/learning-journal` is on your PATH if you use Cursor’s bin, or run directly:
+
+```bash
+learning-journal merge-force
+learning-journal backfill --dry-run
+learning-journal backfill --adapter cursor
+```
+
+Cursor hooks still work via the backward-compatible path:
+
+```bash
+~/.cursor/hooks/learning_journal/run.sh merge-force
+```
+
+## Architecture
+
+```
+adapters/cursor/     → Cursor hook stdin / transcripts  →  core/  →  ~/.cursor/learning-journal/
+adapters/claude/     → (planned) Claude Code hooks
+bin/learning-journal → tool-agnostic merge / backfill CLI
+core/                → patterns, projects, ledger merge (shared)
+skills/              → Cursor Agent Skills for /learn-review and /learn-backfill
+```
+
+Normalized events include `source` (`cursor`, `claude`, …) so one ledger can aggregate multiple tools later.
+
+See [`adapters/README.md`](adapters/README.md) for adapter conventions.
 
 ## First-time setup
 
-1. **Label your repos** — edit `~/.cursor/learning-journal/projects.json`:
-
-   ```json
-   {
-     "github.com/your-org/your-repo": { "label": "My App" }
-   }
-   ```
-
-   Keys are git remote URLs (`git remote get-url origin`). Non-git folders use `local:{hash}`.
-
-2. **Seed from existing chats** (optional):
-
-   ```bash
-   python3 ~/.cursor/hooks/learning_journal/hook.py backfill-transcripts --dry-run
-   python3 ~/.cursor/hooks/learning_journal/hook.py backfill-transcripts
-   ```
-
-3. **Start reviewing** — in Cursor chat: `/learn-review week`
-
-## Customize patterns
-
-Edit `~/.cursor/learning-journal/patterns.json` to add concepts you care about (React hooks, SQL, Zod, etc.). Each entry has regexes for code edits, agent mentions, and user questions.
-
-## Configuration
-
-`~/.cursor/learning-journal/config.json`:
-
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `reviews_required_for_learned` | 5 | Review passes before `learned` |
-| `min_exposures_for_queue` | 3 | Min signals before surfacing in review |
-| `merge_debounce_seconds` | 45 | Debounce on ledger merge |
+1. Edit `~/.cursor/learning-journal/projects.json` with repo labels (git remote → friendly name).
+2. `learning-journal backfill --dry-run` then `learning-journal backfill`
+3. In Cursor chat: `/learn-review week`
 
 ## Repo layout
 
 ```
-cursor-learning-journal/
-├── install.sh              # Install into ~/.cursor/
-├── hooks.json.example      # Hook config merged on install
-├── hooks/learning_journal/ # Capture + merge + backfill scripts
-├── skills/
-│   ├── learning-review/    # /learn-review
-│   └── learning-backfill/  # /learn-backfill
-└── journal-templates/      # Default config (copied once on install)
+learning-journal/
+├── core/                   # Tool-agnostic ledger + patterns
+├── adapters/
+│   ├── cursor/             # Cursor hooks + transcript backfill
+│   └── claude/             # Placeholder
+├── bin/learning-journal    # Shared CLI
+├── skills/                 # Cursor review/backfill skills
+├── journal-templates/      # Default config (copied on install)
+├── hooks.json.example      # Cursor hook config
+└── install.sh
 ```
 
 ## Updating
 
 ```bash
-cd cursor-learning-journal
-git pull
-./install.sh   # re-link symlinks; merges any new hook entries
-```
-
-Your personal `topics.json`, prompts, and review history are **not** in this repo.
-
-## Uninstall
-
-```bash
-rm -f ~/.cursor/hooks/learning_journal
-rm -f ~/.cursor/skills/learning-review ~/.cursor/skills/learning-backfill
-# Manually remove learning_journal entries from ~/.cursor/hooks.json
-# Optionally delete ~/.cursor/learning-journal/
+git pull && ./install.sh
 ```
 
 ## License

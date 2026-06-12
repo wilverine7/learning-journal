@@ -17,11 +17,12 @@ Run this **once** to seed the ledger, then rely on hooks for new chats. Safe to 
 Show how much would be imported without writing:
 
 ```bash
-python3 ~/.cursor/hooks/learning_journal/hook.py backfill-transcripts --dry-run
+learning-journal backfill --dry-run
 ```
 
 Print the JSON summary to the user:
 
+- `adapter`
 - `transcripts_seen`
 - `transcripts_processed`
 - `transcripts_skipped`
@@ -31,7 +32,13 @@ Print the JSON summary to the user:
 ### 2. Run the import
 
 ```bash
-python3 ~/.cursor/hooks/learning_journal/hook.py backfill-transcripts
+learning-journal backfill --adapter cursor
+```
+
+Legacy equivalent:
+
+```bash
+~/.cursor/hooks/learning_journal/run.sh backfill-transcripts
 ```
 
 This will:
@@ -65,8 +72,10 @@ Tell the user:
 Only if the user explicitly asks to re-scan everything:
 
 ```bash
-python3 ~/.cursor/hooks/learning_journal/hook.py backfill-transcripts --force
+learning-journal backfill --adapter cursor --force
 ```
+
+Legacy: `~/.cursor/hooks/learning_journal/run.sh backfill-transcripts --force`
 
 `--force` ignores the processed-transcript cache and may duplicate events already merged into topics. Prefer normal rerun (no flags) which only processes new or changed transcript files.
 

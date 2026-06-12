@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install cursor-learning-journal into ~/.cursor/
+# Install learning-journal into ~/.cursor/
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -8,7 +8,7 @@ JOURNAL_DIR="$CURSOR_DIR/learning-journal"
 HOOKS_JSON="$CURSOR_DIR/hooks.json"
 EXAMPLE_HOOKS="$REPO_ROOT/hooks.json.example"
 
-mkdir -p "$CURSOR_DIR/hooks" "$CURSOR_DIR/skills" "$JOURNAL_DIR"
+mkdir -p "$CURSOR_DIR/hooks" "$CURSOR_DIR/skills" "$CURSOR_DIR/bin" "$JOURNAL_DIR"
 
 link_path() {
   local source="$1"
@@ -23,12 +23,15 @@ link_path() {
   echo "Linked $target -> $source"
 }
 
-link_path "$REPO_ROOT/hooks/learning_journal" "$CURSOR_DIR/hooks/learning_journal"
+# Backward-compatible hook path (hooks.json references ./hooks/learning_journal/)
+link_path "$REPO_ROOT/adapters/cursor" "$CURSOR_DIR/hooks/learning_journal"
 link_path "$REPO_ROOT/skills/learning-review" "$CURSOR_DIR/skills/learning-review"
 link_path "$REPO_ROOT/skills/learning-backfill" "$CURSOR_DIR/skills/learning-backfill"
+link_path "$REPO_ROOT/bin/learning-journal" "$CURSOR_DIR/bin/learning-journal"
 
 chmod +x "$CURSOR_DIR/hooks/learning_journal/run.sh"
-chmod +x "$CURSOR_DIR/hooks/learning_journal/hook.py"
+chmod +x "$REPO_ROOT/adapters/cursor/hook.py"
+chmod +x "$REPO_ROOT/bin/learning-journal"
 
 python3 <<PY
 import json
@@ -80,11 +83,13 @@ touch "$JOURNAL_DIR/prompts.jsonl" "$JOURNAL_DIR/signals.jsonl" "$JOURNAL_DIR/re
 
 echo ""
 echo "Install complete."
+echo "  Repo:         $REPO_ROOT"
 echo "  Journal data: $JOURNAL_DIR"
+echo "  CLI:          learning-journal (via ~/.cursor/bin)"
 echo "  Skills:       /learn-review, /learn-backfill"
 echo ""
 echo "Next steps:"
 echo "  1. Edit $JOURNAL_DIR/projects.json with your repo labels"
 echo "  2. Restart Cursor (Settings -> Hooks to verify)"
-echo "  3. Run: python3 $CURSOR_DIR/hooks/learning_journal/hook.py backfill-transcripts"
+echo "  3. learning-journal backfill --dry-run"
 echo "  4. In chat: /learn-review week"
