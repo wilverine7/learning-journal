@@ -1,0 +1,164 @@
+[
+  {
+    "slug": "react/use-memo",
+    "title": "useMemo",
+    "category": "react",
+    "keywords": ["usememo", "memoize", "memoization"],
+    "code_regex": ["\\buseMemo\\s*\\("],
+    "mention_regex": ["\\buseMemo\\b", "memoiz"],
+    "question_regex": ["\\buseMemo\\b", "memoiz"]
+  },
+  {
+    "slug": "react/use-callback",
+    "title": "useCallback",
+    "category": "react",
+    "keywords": ["usecallback", "callback memo"],
+    "code_regex": ["\\buseCallback\\s*\\("],
+    "mention_regex": ["\\buseCallback\\b"],
+    "question_regex": ["\\buseCallback\\b"]
+  },
+  {
+    "slug": "react/use-effect",
+    "title": "useEffect",
+    "category": "react",
+    "keywords": ["useeffect", "side effect"],
+    "code_regex": ["\\buseEffect\\s*\\("],
+    "mention_regex": ["\\buseEffect\\b", "side effect"],
+    "question_regex": ["\\buseEffect\\b", "side effect"]
+  },
+  {
+    "slug": "react/state-management",
+    "title": "React state",
+    "category": "react",
+    "keywords": ["usestate", "state", "setstate"],
+    "code_regex": ["\\buseState\\s*\\(", "\\bset[A-Z][A-Za-z0-9_]*\\s*\\("],
+    "mention_regex": ["\\buseState\\b", "component state", "local state"],
+    "question_regex": ["\\buseState\\b", "why.*state", "component state"]
+  },
+  {
+    "slug": "react/context",
+    "title": "React Context",
+    "category": "react",
+    "keywords": ["context", "usecontext", "provider"],
+    "code_regex": ["\\buseContext\\s*\\(", "createContext\\s*\\("],
+    "mention_regex": ["\\bContext\\b", "\\buseContext\\b", "Provider"],
+    "question_regex": ["\\bContext\\b", "\\buseContext\\b"]
+  },
+  {
+    "slug": "sql/coalesce",
+    "title": "COALESCE",
+    "category": "sql",
+    "keywords": ["coalesce"],
+    "code_regex": ["\\bCOALESCE\\s*\\(", "\\bcoalesce\\s*\\("],
+    "mention_regex": ["\\bCOALESCE\\b", "\\bcoalesce\\b"],
+    "question_regex": ["\\bCOALESCE\\b", "\\bcoalesce\\b"]
+  },
+  {
+    "slug": "sql/nullif",
+    "title": "NULLIF",
+    "category": "sql",
+    "keywords": ["nullif"],
+    "code_regex": ["\\bNULLIF\\s*\\(", "\\bnullif\\s*\\("],
+    "mention_regex": ["\\bNULLIF\\b", "\\bnullif\\b"],
+    "question_regex": ["\\bNULLIF\\b", "\\bnullif\\b"]
+  },
+  {
+    "slug": "sql/lateral-join",
+    "title": "LATERAL JOIN",
+    "category": "sql",
+    "keywords": ["lateral", "cross join lateral", "left join lateral"],
+    "code_regex": ["\\bJOIN\\s+LATERAL\\b", "\\bLATERAL\\b"],
+    "mention_regex": ["\\bLATERAL\\b", "lateral join"],
+    "question_regex": ["\\bLATERAL\\b", "lateral join"]
+  },
+  {
+    "slug": "sql/cte",
+    "title": "Common Table Expressions (WITH)",
+    "category": "sql",
+    "keywords": ["cte", "with clause", "common table"],
+    "code_regex": ["\\bWITH\\s+[A-Za-z_][A-Za-z0-9_]*\\s+AS\\s*\\("],
+    "mention_regex": ["\\bCTE\\b", "common table expression", "\\bWITH\\s+"],
+    "question_regex": ["\\bCTE\\b", "common table expression"]
+  },
+  {
+    "slug": "sql/window-functions",
+    "title": "Window functions",
+    "category": "sql",
+    "keywords": ["over(", "partition by", "row_number", "rank("],
+    "code_regex": ["\\bOVER\\s*\\(", "\\bROW_NUMBER\\s*\\(", "\\bRANK\\s*\\(", "\\bPARTITION\\s+BY\\b"],
+    "mention_regex": ["window function", "\\bOVER\\s*\\(", "partition by"],
+    "question_regex": ["window function", "partition by"]
+  },
+  {
+    "slug": "typescript/zod-parse",
+    "title": "Zod validation",
+    "category": "typescript",
+    "keywords": ["zod", "parse", "safeParse"],
+    "code_regex": ["\\.parse\\s*\\(", "\\.safeParse\\s*\\(", "\\bz\\.object\\s*\\("],
+    "mention_regex": ["\\bZod\\b", "\\.parse\\(", "schema validation"],
+    "question_regex": ["\\bZod\\b", "schema validation"]
+  },
+  {
+    "slug": "typescript/nullish-coalescing",
+    "title": "Nullish coalescing (??)",
+    "category": "typescript",
+    "keywords": ["??", "nullish"],
+    "code_regex": ["\\?\\?"],
+    "mention_regex": ["nullish coalescing", "\\?\\?"],
+    "question_regex": ["nullish coalescing", "\\?\\?"]
+  },
+  {
+    "slug": "typescript/optional-chaining",
+    "title": "Optional chaining (?.)",
+    "category": "typescript",
+    "keywords": ["?.", "optional chain"],
+    "code_regex": ["\\.\\?\\."],
+    "mention_regex": ["optional chaining", "\\?\\."],
+    "question_regex": ["optional chaining"]
+  },
+  {
+    "slug": "typescript/generics",
+    "title": "TypeScript generics",
+    "category": "typescript",
+    "keywords": ["generic", "extends", "infer"],
+    "code_regex": ["<T>", "<T,", "extends ", "\\binfer\\b"],
+    "mention_regex": ["generic type", "\\binfer\\b"],
+    "question_regex": ["generic", "\\binfer\\b"]
+  },
+  {
+    "slug": "graphql/apollo-cache",
+    "title": "Apollo Client cache",
+    "category": "graphql",
+    "keywords": ["apollo", "cache", "refetch", "fetchpolicy"],
+    "code_regex": ["fetchPolicy\\s*:", "cache\\.modify", "writeQuery", "readQuery"],
+    "mention_regex": ["Apollo cache", "fetchPolicy", "cache update"],
+    "question_regex": ["Apollo cache", "fetchPolicy"]
+  },
+  {
+    "slug": "async/promises",
+    "title": "Promises and async/await",
+    "category": "javascript",
+    "keywords": ["async", "await", "promise", "then("],
+    "code_regex": ["\\basync\\b", "\\bawait\\b", "\\.then\\s*\\(", "Promise\\."],
+    "mention_regex": ["\\basync\\b", "\\bawait\\b", "Promise"],
+    "question_regex": ["\\basync\\b", "\\bawait\\b", "Promise"]
+  },
+  {
+    "slug": "patterns/early-return",
+    "title": "Early return guard clauses",
+    "category": "patterns",
+    "keywords": ["early return", "guard clause"],
+    "code_regex": ["\\bif\\s*\\([^\\)]*\\)\\s*\\{\\s*return\\b"],
+    "mention_regex": ["early return", "guard clause"],
+    "question_regex": ["early return", "guard clause"]
+  },
+  {
+    "slug": "git/rebase-merge",
+    "title": "Git rebase vs merge",
+    "category": "git",
+    "keywords": ["rebase", "merge", "squash"],
+    "code_regex": [],
+    "mention_regex": ["\\brebase\\b", "merge conflict", "squash"],
+    "question_regex": ["\\brebase\\b", "merge vs"]
+  }
+]

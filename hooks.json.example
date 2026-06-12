@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "./hooks/learning_journal/run.sh capture-prompt"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "./hooks/learning_journal/run.sh capture-edit"
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "./hooks/learning_journal/run.sh capture-response"
+      }
+    ],
+    "stop": [
+      {
+        "command": "./hooks/learning_journal/run.sh merge"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "./hooks/learning_journal/run.sh merge"
+      }
+    ]
+  }
+}

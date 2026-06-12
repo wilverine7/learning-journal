@@ -1,0 +1,7 @@
+{
+  "reviews_required_for_learned": 5,
+  "min_exposures_for_queue": 3,
+  "merge_debounce_seconds": 45,
+  "default_review_window_days": 7,
+  "max_events_per_topic": 50
+}
